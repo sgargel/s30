@@ -3,6 +3,7 @@ package screens
 import (
 	"bytes"
 	"image"
+	"strings"
 	"testing"
 
 	"github.com/benprew/s30/assets"
@@ -447,6 +448,172 @@ func TestLeavingWithALegalDeckCloses(t *testing.T) {
 	}
 	if screen.leaveWarning {
 		t.Error("leaveWarning = true, want no warning for a legal deck")
+	}
+}
+
+func TestDeckCardsDoNotOverflowDeckArea(t *testing.T) {
+	collection := domain.NewCardCollection()
+	uniqueNames := make(map[string]bool)
+	added := 0
+	for _, card := range domain.CARDS {
+		if !uniqueNames[card.Name()] {
+			uniqueNames[card.Name()] = true
+			collection.AddCard(card, 1)
+			if err := collection.MoveCardToDeck(card, 0, 1); err != nil {
+				t.Fatalf("MoveCardToDeck() error = %v", err)
+			}
+			added++
+			if added == 42 {
+				break
+			}
+		}
+	}
+	if added < 42 {
+		t.Fatalf("could not find 42 unique cards, found %d", added)
+	}
+
+	player := &domain.Player{
+		Character:   domain.Character{CardCollection: collection},
+		MinDeckSize: 36,
+		ActiveDeck:  0,
+	}
+
+	screen, err := NewEditDeckScreen(player, &domain.City{Tier: domain.TierHamlet}, 1024, 768)
+	if err != nil {
+		t.Fatalf("NewEditDeckScreen() error = %v", err)
+	}
+
+	bounds := screen.deckDropArea.GetDropBounds()
+	cardHeight := domain.CardArtMiniHeight
+
+	// 1. Initially (deckScrollRow == 0), no visible card should exceed the bottom bound (540)
+	visibleCount := 0
+	for _, display := range screen.deckCardDisplays {
+		if screen.isDeckCardVisible(display) {
+			visibleCount++
+			if display.Y < bounds.Min.Y+55 || display.Y+cardHeight > bounds.Max.Y {
+				t.Errorf("visible card %s at Y=%d overflows deck area bounds [%d, %d]",
+					display.Card.Name(), display.Y, bounds.Min.Y+55, bounds.Max.Y)
+			}
+		}
+	}
+	// With 6 columns and 4 visible rows, exactly 24 cards should be visible
+	if visibleCount != 24 {
+		t.Errorf("visibleCount = %d, want 24", visibleCount)
+	}
+
+	// 2. Max scroll row should be 3 (7 rows total - 4 visible rows)
+	if got, want := screen.maxDeckScrollRow(), 3; got != want {
+		t.Errorf("maxDeckScrollRow() = %d, want %d", got, want)
+	}
+
+	// 3. Scroll down to row 1
+	screen.scrollDeckDown()
+	if screen.deckScrollRow != 1 {
+		t.Errorf("after scrollDeckDown(), deckScrollRow = %d, want 1", screen.deckScrollRow)
+	}
+
+	// 4. Scroll down to row 3 (last page)
+	screen.scrollDeckDown()
+	screen.scrollDeckDown()
+	if screen.deckScrollRow != 3 {
+		t.Errorf("after scrollDeckDown() to end, deckScrollRow = %d, want 3", screen.deckScrollRow)
+	}
+	// 42 cards total: rows 3, 4, 5, 6 -> 4 rows * 6 cols = 24 cards visible
+	row3Visible := 0
+	for _, display := range screen.deckCardDisplays {
+		if screen.isDeckCardVisible(display) {
+			row3Visible++
+			if display.Y < bounds.Min.Y+55 || display.Y+cardHeight > bounds.Max.Y {
+				t.Errorf("card %s at Y=%d overflows bounds [%d, %d] on scroll row 3",
+					display.Card.Name(), display.Y, bounds.Min.Y+55, bounds.Max.Y)
+			}
+		}
+	}
+	if row3Visible != 24 {
+		t.Errorf("row3Visible = %d, want 24", row3Visible)
+	}
+
+	// 5. Clamping at bottom
+	screen.scrollDeckDown()
+	if screen.deckScrollRow != 3 {
+		t.Errorf("scrollDeckDown() should clamp at maxDeckScrollRow 3, got %d", screen.deckScrollRow)
+	}
+
+	// 6. Scroll back up
+	screen.scrollDeckUp()
+	if screen.deckScrollRow != 2 {
+		t.Errorf("after scrollDeckUp(), deckScrollRow = %d, want 2", screen.deckScrollRow)
+	}
+	screen.scrollDeckUp()
+	screen.scrollDeckUp()
+	if screen.deckScrollRow != 0 {
+		t.Errorf("after scrollDeckUp() to top, deckScrollRow = %d, want 0", screen.deckScrollRow)
+	}
+	screen.scrollDeckUp()
+	if screen.deckScrollRow != 0 {
+		t.Errorf("scrollDeckUp() should clamp at 0, got %d", screen.deckScrollRow)
+	}
+}
+
+func TestVisibleDraggablesFollowDeckScroll(t *testing.T) {
+	collection := domain.NewCardCollection()
+	uniqueNames := make(map[string]bool)
+	added := 0
+	for _, card := range domain.CARDS {
+		if !uniqueNames[card.Name()] {
+			uniqueNames[card.Name()] = true
+			collection.AddCard(card, 1)
+			if err := collection.MoveCardToDeck(card, 0, 1); err != nil {
+				t.Fatalf("MoveCardToDeck() error = %v", err)
+			}
+			added++
+			if added == 42 {
+				break
+			}
+		}
+	}
+
+	player := &domain.Player{
+		Character:   domain.Character{CardCollection: collection},
+		MinDeckSize: 36,
+		ActiveDeck:  0,
+	}
+
+	screen, err := NewEditDeckScreen(player, &domain.City{Tier: domain.TierHamlet}, 1024, 768)
+	if err != nil {
+		t.Fatalf("NewEditDeckScreen() error = %v", err)
+	}
+
+	// At row 0, visible draggables from deck should only be 24 (not 42)
+	draggables := screen.visibleDraggables()
+	deckDraggablesCount := 0
+	for _, d := range draggables {
+		if btn, ok := d.(*dragdrop.DraggableButton); ok {
+			if strings.HasPrefix(btn.ID, deckCardDragIDPrefix) {
+				deckDraggablesCount++
+			}
+		}
+	}
+	if deckDraggablesCount != 24 {
+		t.Errorf("deckDraggablesCount at scroll 0 = %d, want 24", deckDraggablesCount)
+	}
+
+	// Scroll to end (row 3)
+	screen.scrollDeckDown()
+	screen.scrollDeckDown()
+	screen.scrollDeckDown()
+
+	draggables = screen.visibleDraggables()
+	deckDraggablesCount = 0
+	for _, d := range draggables {
+		btn := d.(*dragdrop.DraggableButton)
+		if strings.HasPrefix(btn.ID, deckCardDragIDPrefix) {
+			deckDraggablesCount++
+		}
+	}
+	if deckDraggablesCount != 24 {
+		t.Errorf("deckDraggablesCount at scroll 3 = %d, want 24", deckDraggablesCount)
 	}
 }
 
