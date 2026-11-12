@@ -59,3 +59,33 @@ func TestDeckShortfallReadsTheActiveDeck(t *testing.T) {
 		t.Errorf("DeckShortfall() = %d, want 36 for an empty active deck", got)
 	}
 }
+
+func TestPlayerGetActiveDeckRespectsActiveDeck(t *testing.T) {
+	plains := FindCardByName("Plains")
+	forest := FindCardByName("Forest")
+	collection := NewCardCollection()
+	collection.AddCard(plains, 40)
+	collection.AddCard(forest, 40)
+
+	if err := collection.MoveCardToDeck(plains, 0, 40); err != nil {
+		t.Fatalf("MoveCardToDeck(plains, 0) error = %v", err)
+	}
+	if err := collection.MoveCardToDeck(forest, 1, 40); err != nil {
+		t.Fatalf("MoveCardToDeck(forest, 1) error = %v", err)
+	}
+
+	player := &Player{
+		Character:   Character{CardCollection: collection},
+		MinDeckSize: 36,
+		ActiveDeck:  1,
+	}
+
+	deck := player.GetActiveDeck()
+	if deck[forest] != 40 {
+		t.Errorf("expected 40 forests in active deck 1, got %d", deck[forest])
+	}
+	if deck[plains] != 0 {
+		t.Errorf("expected 0 plains in active deck 1, got %d", deck[plains])
+	}
+}
+
