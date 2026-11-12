@@ -622,3 +622,96 @@ func testPlayerWithDeck(t *testing.T, cards int) *domain.Player {
 		ActiveDeck:  0,
 	}
 }
+
+func TestEditDeckSwitchActiveDeck(t *testing.T) {
+	plains := domain.FindCardByName("Plains")
+	mountain := domain.FindCardByName("Mountain")
+	collection := domain.NewCardCollection()
+	collection.AddCard(plains, 36)
+	collection.AddCard(mountain, 36)
+
+	if err := collection.MoveCardToDeck(plains, 0, 36); err != nil {
+		t.Fatalf("MoveCardToDeck(plains, 0) error = %v", err)
+	}
+	if err := collection.MoveCardToDeck(mountain, 1, 36); err != nil {
+		t.Fatalf("MoveCardToDeck(mountain, 1) error = %v", err)
+	}
+
+	player := &domain.Player{
+		Character:   domain.Character{CardCollection: collection},
+		MinDeckSize: 36,
+		ActiveDeck:  0,
+	}
+
+	screen, err := NewEditDeckScreen(player, &domain.City{Tier: domain.TierHamlet}, 1024, 768)
+	if err != nil {
+		t.Fatalf("NewEditDeckScreen error: %v", err)
+	}
+
+	// Initially on Deck 0
+	if screen.Player.ActiveDeck != 0 {
+		t.Errorf("expected initial ActiveDeck 0, got %d", screen.Player.ActiveDeck)
+	}
+	if len(screen.deckCardDisplays) != 1 || screen.deckCardDisplays[0].Card.Name() != "Plains" {
+		t.Fatalf("expected Plains in deck 0 display, got %+v", screen.deckCardDisplays)
+	}
+	if screen.deckCardCount(0) != 36 {
+		t.Errorf("deckCardCount(0) = %d, want 36", screen.deckCardCount(0))
+	}
+	if screen.deckCardCount(1) != 36 {
+		t.Errorf("deckCardCount(1) = %d, want 36", screen.deckCardCount(1))
+	}
+	if screen.deckCardCount(2) != 0 {
+		t.Errorf("deckCardCount(2) = %d, want 0", screen.deckCardCount(2))
+	}
+
+	// Switch to Deck 1
+	screen.SwitchDeck(1)
+	if screen.Player.ActiveDeck != 1 {
+		t.Errorf("expected ActiveDeck 1 after switch, got %d", screen.Player.ActiveDeck)
+	}
+	if len(screen.deckCardDisplays) != 1 || screen.deckCardDisplays[0].Card.Name() != "Mountain" {
+		t.Fatalf("expected Mountain in deck 1 display, got %+v", screen.deckCardDisplays)
+	}
+
+	// Switch to Deck 2 (empty)
+	screen.SwitchDeck(2)
+	if screen.Player.ActiveDeck != 2 {
+		t.Errorf("expected ActiveDeck 2, got %d", screen.Player.ActiveDeck)
+	}
+	if len(screen.deckCardDisplays) != 0 {
+		t.Errorf("expected empty deck 2 display, got %d cards", len(screen.deckCardDisplays))
+	}
+}
+
+func TestDeckTabBounds(t *testing.T) {
+	W, H := 1024, 768
+	b0 := deckTabBounds(0, W)
+	b1 := deckTabBounds(1, W)
+	b2 := deckTabBounds(2, W)
+	back := editDeckBackBounds(W)
+
+	tabs := []image.Rectangle{b0, b1, b2}
+	for i, tab := range tabs {
+		if tab.Min.X < 0 || tab.Max.X > W {
+			t.Errorf("tab %d X out of screen bounds: %+v", i, tab)
+		}
+		if tab.Min.Y < 0 || tab.Max.Y > H {
+			t.Errorf("tab %d Y out of screen bounds: %+v", i, tab)
+		}
+		if tab.Overlaps(back) {
+			t.Errorf("tab %d overlaps Back button: tab=%+v back=%+v", i, tab, back)
+		}
+	}
+
+	if b0.Max.X > b1.Min.X {
+		t.Errorf("tab 0 overlaps or touches tab 1: b0=%+v b1=%+v", b0, b1)
+	}
+	if b1.Max.X > b2.Min.X {
+		t.Errorf("tab 1 overlaps or touches tab 2: b1=%+v b2=%+v", b1, b2)
+	}
+	if b2.Max.X > back.Min.X {
+		t.Errorf("tab 2 exceeds start of Back button: b2=%+v back=%+v", b2, back)
+	}
+}
+

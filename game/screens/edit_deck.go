@@ -413,15 +413,16 @@ func (s *EditDeckScreen) Draw(screen *ebiten.Image, W, H int, scale float64) {
 	screen.DrawImage(deckOutline, deckOpts)
 
 	// Draw helper text above collection area
-	helpText := "[A] Add to Deck\n[D] Remove from Deck\n[S] Sell Card"
+	helpText := "[A] Add to Deck\n[D] Remove from Deck\n[S] Sell Card\n[1-3] Switch Deck"
 	if s.DisableSelling {
-		helpText = fmt.Sprintf("[A] Add to Deck\n[D] Remove from Deck\nMin deck: %d cards", s.Player.MinDeckSize)
+		helpText = fmt.Sprintf("[A] Add to Deck\n[D] Remove from Deck\n[1-3] Switch Deck\nMin deck: %d cards", s.Player.MinDeckSize)
 	}
 
 	helpY := float64(collectionY) - 130
 	helpOpts := &ebiten.DrawImageOptions{}
 	elements.NewText(14, helpText, int(10*scale), int(helpY*scale)).Draw(screen, helpOpts, 1.0)
 	drawDeckActionButton(screen, editDeckBackBounds(W), "Back")
+	s.drawDeckTabs(screen, W)
 
 	if s.leaveWarning {
 		s.drawLeaveWarning(screen, scale)
@@ -559,6 +560,21 @@ func (s *EditDeckScreen) Update(W, H int, scale float64) (screenui.ScreenName, s
 		}
 	}
 
+	// Deck tab clicks and hotkeys
+	for i := 0; i < domain.MaxPlayerDecks; i++ {
+		if ui.Click(deckTabBounds(i, W)) {
+			s.SwitchDeck(i)
+			break
+		}
+	}
+	if inpututil.IsKeyJustPressed(ebiten.Key1) || inpututil.IsKeyJustPressed(ebiten.KeyNumpad1) {
+		s.SwitchDeck(0)
+	} else if inpututil.IsKeyJustPressed(ebiten.Key2) || inpututil.IsKeyJustPressed(ebiten.KeyNumpad2) {
+		s.SwitchDeck(1)
+	} else if inpututil.IsKeyJustPressed(ebiten.Key3) || inpututil.IsKeyJustPressed(ebiten.KeyNumpad3) {
+		s.SwitchDeck(2)
+	}
+
 	// Handle keyboard shortcuts
 	if inpututil.IsKeyJustPressed(ebiten.KeyA) && s.hoveredCollectionIdx >= 0 {
 		s.handleDeckCardAdd(s.hoveredCollectionIdx)
@@ -623,6 +639,18 @@ func editDeckBackBounds(W int) image.Rectangle {
 	const height = 26
 	top := 768 - COLLECTION_HEIGHT - filterBtnSize - filterGapAboveCarousel + (filterBtnSize-height)/2
 	return image.Rect(W-110, top, W-12, top+height)
+}
+
+func deckTabBounds(deckIndex int, W int) image.Rectangle {
+	const (
+		tabWidth  = 110
+		tabHeight = 26
+		tabGap    = 10
+		startX    = 520
+	)
+	top := 768 - COLLECTION_HEIGHT - filterBtnSize - filterGapAboveCarousel + (filterBtnSize-tabHeight)/2
+	x := startX + deckIndex*(tabWidth+tabGap)
+	return image.Rect(x, top, x+tabWidth, top+tabHeight)
 }
 
 func editDeckSellBounds() image.Rectangle { return image.Rect(10, 12, 150, 68) }
@@ -719,6 +747,79 @@ func drawDeckActionButton(screen *ebiten.Image, bounds image.Rectangle, label st
 	opts.GeoM.Translate(float64(bounds.Min.X), float64(bounds.Min.Y))
 	screen.DrawImage(button, opts)
 	elements.NewText(18, label, bounds.Min.X+22, bounds.Min.Y+10).Draw(screen, &ebiten.DrawImageOptions{}, 1)
+}
+
+func (s *EditDeckScreen) drawDeckTabs(screen *ebiten.Image, W int) {
+	for i := 0; i < domain.MaxPlayerDecks; i++ {
+		bounds := deckTabBounds(i, W)
+		isActive := s.Player != nil && s.Player.ActiveDeck == i
+		tabImg := ebiten.NewImage(bounds.Dx(), bounds.Dy())
+		var textColor color.Color
+		if isActive {
+			tabImg.Fill(color.RGBA{R: 95, G: 75, B: 30, A: 245})
+			w, h := bounds.Dx(), bounds.Dy()
+			for x := 0; x < w; x++ {
+				tabImg.Set(x, 0, color.RGBA{R: 235, G: 200, B: 90, A: 255})
+				tabImg.Set(x, h-1, color.RGBA{R: 235, G: 200, B: 90, A: 255})
+			}
+			for y := 0; y < h; y++ {
+				tabImg.Set(0, y, color.RGBA{R: 235, G: 200, B: 90, A: 255})
+				tabImg.Set(w-1, y, color.RGBA{R: 235, G: 200, B: 90, A: 255})
+			}
+			textColor = color.RGBA{R: 255, G: 235, B: 140, A: 255}
+		} else {
+			tabImg.Fill(color.RGBA{R: 45, G: 40, B: 45, A: 230})
+			w, h := bounds.Dx(), bounds.Dy()
+			for x := 0; x < w; x++ {
+				tabImg.Set(x, 0, color.RGBA{R: 80, G: 75, B: 80, A: 200})
+				tabImg.Set(x, h-1, color.RGBA{R: 80, G: 75, B: 80, A: 200})
+			}
+			for y := 0; y < h; y++ {
+				tabImg.Set(0, y, color.RGBA{R: 80, G: 75, B: 80, A: 200})
+				tabImg.Set(w-1, y, color.RGBA{R: 80, G: 75, B: 80, A: 200})
+			}
+			textColor = color.RGBA{R: 180, G: 180, B: 190, A: 255}
+		}
+		opts := &ebiten.DrawImageOptions{}
+		opts.GeoM.Translate(float64(bounds.Min.X), float64(bounds.Min.Y))
+		screen.DrawImage(tabImg, opts)
+
+		label := fmt.Sprintf("Deck %d (%d)", i+1, s.deckCardCount(i))
+		txt := elements.NewText(14, label, bounds.Min.X, bounds.Min.Y)
+		txt.BoundsW = float64(bounds.Dx())
+		txt.BoundsH = float64(bounds.Dy())
+		txt.HAlign = elements.AlignCenter
+		txt.VAlign = elements.AlignMiddle
+		txt.Color = textColor
+		txt.Draw(screen, &ebiten.DrawImageOptions{}, 1)
+	}
+}
+
+func (s *EditDeckScreen) deckCardCount(deckIndex int) int {
+	if s.Player == nil {
+		return 0
+	}
+	deck := s.Player.CardCollection.GetDeck(deckIndex)
+	count := 0
+	for _, n := range deck {
+		count += n
+	}
+	return count
+}
+
+// SwitchDeck switches the player's active deck to deckIndex and refreshes the UI.
+func (s *EditDeckScreen) SwitchDeck(deckIndex int) {
+	if s.Player == nil {
+		return
+	}
+	s.Player.SetActiveDeck(deckIndex)
+	s.deckScrollRow = 0
+	s.hoveredDeckIdx = -1
+	if s.hoveredCollectionIdx < 0 {
+		s.MagnifierImage = nil
+		s.MagnifiedCard = nil
+	}
+	s.updateState()
 }
 
 // Reload deck display and collection list

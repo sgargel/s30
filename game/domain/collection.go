@@ -55,12 +55,12 @@ func (cc CardCollection) MoveCardToDeck(card *Card, deckIndex int, count int) er
 		return fmt.Errorf("card %s not found in collection", card.Name())
 	}
 
-	totalInDecks := 0
-	for _, deckCount := range item.DeckCounts {
-		totalInDecks += deckCount
+	currentInThisDeck := 0
+	if deckIndex < len(item.DeckCounts) {
+		currentInThisDeck = item.DeckCounts[deckIndex]
 	}
 
-	availableCount := item.Count - totalInDecks
+	availableCount := item.Count - currentInThisDeck
 	if availableCount < count {
 		return fmt.Errorf("insufficient available cards for %s (have %d available, need %d)",
 			card.Name(), availableCount, count)

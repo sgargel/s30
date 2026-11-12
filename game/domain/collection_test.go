@@ -172,4 +172,49 @@ func TestCardCollectionUnmarshalJSONSkipsRemovedCards(t *testing.T) {
 	}
 }
 
+func TestMoveCardToMultipleDecksIndependently(t *testing.T) {
+	bolt := FindCardByName("Lightning Bolt")
+	if bolt == nil {
+		t.Fatal("Could not find Lightning Bolt")
+	}
+
+	cc := NewCardCollection()
+	cc.AddCard(bolt, 4)
+
+	// Deck 0 can take up to all 4 owned copies.
+	if err := cc.MoveCardToDeck(bolt, 0, 4); err != nil {
+		t.Fatalf("expected 4 bolts in deck 0, got err: %v", err)
+	}
+	if got := cc.GetDeckCount(bolt, 0); got != 4 {
+		t.Errorf("deck 0 count = %d, want 4", got)
+	}
+
+	// Deck 1 can also independently take up to all 4 owned copies.
+	if err := cc.MoveCardToDeck(bolt, 1, 4); err != nil {
+		t.Fatalf("expected 4 bolts in deck 1, got err: %v", err)
+	}
+	if got := cc.GetDeckCount(bolt, 1); got != 4 {
+		t.Errorf("deck 1 count = %d, want 4", got)
+	}
+
+	// Exceeding owned copies in deck 1 should fail.
+	if err := cc.MoveCardToDeck(bolt, 1, 1); err == nil {
+		t.Errorf("expected error adding 5th bolt to deck 1, got nil")
+	}
+
+	// Decrementing owned collection count clamps all decks.
+	if err := cc.DecrementCardCount(bolt); err != nil {
+		t.Fatalf("DecrementCardCount error: %v", err)
+	}
+	if got := cc.GetTotalCount(bolt); got != 3 {
+		t.Errorf("total count = %d, want 3", got)
+	}
+	if got := cc.GetDeckCount(bolt, 0); got != 3 {
+		t.Errorf("deck 0 count clamped = %d, want 3", got)
+	}
+	if got := cc.GetDeckCount(bolt, 1); got != 3 {
+		t.Errorf("deck 1 count clamped = %d, want 3", got)
+	}
+}
+
 
