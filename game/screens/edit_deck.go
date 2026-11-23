@@ -417,7 +417,9 @@ func (s *EditDeckScreen) Draw(screen *ebiten.Image, W, H int, scale float64) {
 
 	helpY := float64(collectionY) - 130
 	helpOpts := &ebiten.DrawImageOptions{}
-	elements.NewText(14, helpText, int(10*scale), int(helpY*scale)).Draw(screen, helpOpts, 1.0)
+	helpTxt := elements.NewText(14, helpText, int(10*scale), int(helpY*scale))
+	helpTxt.LineSpacing = 18.0
+	helpTxt.Draw(screen, helpOpts, 1.0)
 	drawDeckActionButton(screen, editDeckBackBounds(W), "Back")
 	s.drawDeckTabs(screen, W)
 
