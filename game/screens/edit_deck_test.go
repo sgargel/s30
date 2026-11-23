@@ -699,6 +699,9 @@ func TestDeckTabBounds(t *testing.T) {
 		if tab.Min.Y < 0 || tab.Max.Y > H {
 			t.Errorf("tab %d Y out of screen bounds: %+v", i, tab)
 		}
+		if tab.Dy() != filterBtnSize {
+			t.Errorf("tab %d height = %d, want filterBtnSize (%d)", i, tab.Dy(), filterBtnSize)
+		}
 		if tab.Overlaps(back) {
 			t.Errorf("tab %d overlaps Back button: tab=%+v back=%+v", i, tab, back)
 		}
@@ -712,6 +715,15 @@ func TestDeckTabBounds(t *testing.T) {
 	}
 	if b2.Max.X > back.Min.X {
 		t.Errorf("tab 2 exceeds start of Back button: b2=%+v back=%+v", b2, back)
+	}
+}
+
+func TestDeckButtonAssetsLoad(t *testing.T) {
+	imgs := deckButtonImages()
+	for i, img := range imgs {
+		if img == nil {
+			t.Errorf("deck button image %d failed to load", i+1)
+		}
 	}
 }
 
